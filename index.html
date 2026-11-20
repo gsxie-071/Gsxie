@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voetbal voor twee</title>
+<style>
+:root{--bg:#f3f5f2;--fg:#17211a;--card:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101712;--fg:#e8f0ea;--card:#1a251d}}
+:root[data-theme="dark"]{--bg:#101712;--fg:#e8f0ea;--card:#1a251d}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+body{display:flex;flex-direction:column;align-items:center;padding:16px;gap:12px}
+h1{margin:0;font-size:1.4rem}
+.score{display:flex;gap:24px;align-items:center;font-size:2rem;font-weight:700}
+.b{color:#2f7bff}.r{color:#ff4b4b}
+.wrap{position:relative;width:100%;max-width:900px}
+canvas{width:100%;height:auto;border-radius:12px;display:block;background:#2e8b3d}
+#msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font-size:1.6rem;font-weight:700;color:#fff;background:rgba(0,0,0,.45);border-radius:12px;padding:20px;white-space:pre-line}
+.help{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-size:.95rem}
+.help div{background:var(--card);padding:8px 14px;border-radius:10px}
+kbd{border:1px solid currentColor;border-radius:4px;padding:0 5px;font-size:.85em}
+</style>
+</head>
+<body>
+<h1>⚽ Voetbal voor twee</h1>
+<div class="score"><span class="b" id="s1">0</span><span>–</span><span class="r" id="s2">0</span></div>
+<div class="wrap"><canvas id="c" width="800" height="500"></canvas><div id="msg">Druk op een toets om te starten
+Eerste tot 5 doelpunten wint</div></div>
+<div class="help">
+<div><b class="b">Blauw</b>: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+<div><b class="r">Rood</b>: <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></div>
+<div><kbd>R</kbd> = opnieuw</div>
+</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),msg=document.getElementById('msg');
+const W=800,H=500,GH=150,GT=(H-GH)/2,GB=GT+GH,PR=22,BR=11,WIN=5;
+const keys={};
+let score=[0,0],state='start',pause=0,p1,p2,ball;
+function reset(){
+  p1={x:150,y:H/2,vx:0,vy:0,c:'#2f7bff'};
+  p2={x:W-150,y:H/2,vx:0,vy:0,c:'#ff4b4b'};
+  ball={x:W/2,y:H/2,vx:0,vy:0};
+}
+function full(){score=[0,0];upd();reset();}
+function upd(){document.getElementById('s1').textContent=score[0];document.getElementById('s2').textContent=score[1];}
+function show(t){msg.textContent=t;msg.style.display='flex';}
+function hide(){msg.style.display='none';}
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();
+  keys[k]=true;
+  if(k==='r'){full();state='play';hide();return;}
+  if(state==='start'||state==='over'){full();state='play';hide();}
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+function move(p,u,d,l,r){
+  const a=.5;
+  if(keys[u])p.vy-=a; if(keys[d])p.vy+=a;
+  if(keys[l])p.vx-=a; if(keys[r])p.vx+=a;
+  p.vx*=.9;p.vy*=.9;
+  const m=Math.hypot(p.vx,p.vy),mx=5;
+  if(m>mx){p.vx*=mx/m;p.vy*=mx/m;}
+  p.x+=p.vx;p.y+=p.vy;
+  p.x=Math.max(PR,Math.min(W-PR,p.x));
+  p.y=Math.max(PR,Math.min(H-PR,p.y));
+}
+function hitBall(p){
+  const dx=ball.x-p.x,dy=ball.y-p.y,d=Math.hypot(dx,dy)||.01,min=PR+BR;
+  if(d<min){
+    const nx=dx/d,ny=dy/d;
+    ball.x=p.x+nx*min;ball.y=p.y+ny*min;
+    const rel=(ball.vx-p.vx)*nx+(ball.vy-p.vy)*ny;
+    if(rel<0){ball.vx-=1.9*rel*nx;ball.vy-=1.9*rel*ny;}
+    const s=Math.hypot(ball.vx,ball.vy);
+    if(s>14){ball.vx*=14/s;ball.vy*=14/s;}
+  }
+}
+function hitPlayers(){
+  const dx=p2.x-p1.x,dy=p2.y-p1.y,d=Math.hypot(dx,dy)||.01,min=PR*2;
+  if(d<min){
+    const nx=dx/d,ny=dy/d,o=(min-d)/2;
+    p1.x-=nx*o;p1.y-=ny*o;p2.x+=nx*o;p2.y+=ny*o;
+    const t=(p1.vx*nx+p1.vy*ny)-(p2.vx*nx+p2.vy*ny);
+    if(t>0){p1.vx-=t*nx;p1.vy-=t*ny;p2.vx+=t*nx;p2.vy+=t*ny;}
+  }
+}
+function step(){
+  if(state==='play'){
+    move(p1,'w','s','a','d');
+    move(p2,'arrowup','arrowdown','arrowleft','arrowright');
+    hitPlayers();
+    ball.x+=ball.vx;ball.y+=ball.vy;
+    ball.vx*=.99;ball.vy*=.99;
+    hitBall(p1);hitBall(p2);
+    if(ball.y<BR){ball.y=BR;ball.vy*=-.8;}
+    if(ball.y>H-BR){ball.y=H-BR;ball.vy*=-.8;}
+    const inGoal=ball.y>GT&&ball.y<GB;
+    if(ball.x<BR&&!inGoal){ball.x=BR;ball.vx*=-.8;}
+    if(ball.x>W-BR&&!inGoal){ball.x=W-BR;ball.vx*=-.8;}
+    if(ball.x<-BR||ball.x>W+BR){
+      const s=ball.x>W?0:1;score[s]++;upd();
+      if(score[s]>=WIN){state='over';show((s?'Rood':'Blauw')+' wint! 🏆\nDruk op een toets voor een nieuw spel');}
+      else{state='goal';pause=80;show('GOAL! ⚽\n'+(s?'Rood':'Blauw')+' scoort');}
+    }
+  }else if(state==='goal'){
+    if(--pause<=0){reset();state='play';hide();}
+  }
+}
+function circle(x,y,r,c){ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fillStyle=c;ctx.fill();}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  for(let i=0;i<8;i++){ctx.fillStyle=i%2?'#2e8b3d':'#349a45';ctx.fillRect(i*W/8,0,W/8,H);}
+  ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=3;
+  ctx.strokeRect(3,3,W-6,H-6);
+  ctx.beginPath();ctx.moveTo(W/2,3);ctx.lineTo(W/2,H-3);ctx.stroke();
+  ctx.beginPath();ctx.arc(W/2,H/2,60,0,7);ctx.stroke();
+  ctx.strokeRect(3,H/2-110,110,220);ctx.strokeRect(W-113,H/2-110,110,220);
+  ctx.fillStyle='rgba(255,255,255,.9)';
+  ctx.fillRect(0,GT,6,GH);ctx.fillRect(W-6,GT,6,GH);
+  [p1,p2].forEach(p=>{circle(p.x+3,p.y+4,PR,'rgba(0,0,0,.25)');circle(p.x,p.y,PR,p.c);circle(p.x,p.y,PR-7,'rgba(255,255,255,.35)');});
+  circle(ball.x+2,ball.y+3,BR,'rgba(0,0,0,.25)');circle(ball.x,ball.y,BR,'#fff');circle(ball.x,ball.y,BR/2.4,'#222');
+}
+reset();
+(function loop(){step();draw();requestAnimationFrame(loop);})();
+</script>
+</body>
+</html>
